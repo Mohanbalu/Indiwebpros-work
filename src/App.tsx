@@ -3,7 +3,7 @@ import {
   Download, Trash2, RotateCcw, TableProperties, LineChart, 
   Settings, Layers, TrendingUp, IndianRupee, Users, 
   HelpCircle, RefreshCw, FileSpreadsheet, Sparkles, Plus, Info,
-  ExternalLink, AlertTriangle, X, Check, Copy, Globe
+  ExternalLink, AlertTriangle, X, Check, Copy, Globe, Edit3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -38,6 +38,11 @@ export default function App() {
   const [syncState, setSyncState] = useState<'synced' | 'syncing' | 'error' | 'offline'>('offline');
   const [authError, setAuthError] = useState<{ code?: string; message: string; hostname: string } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Workbook custom branding states
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [tempCompany, setTempCompany] = useState('');
+  const [tempSystem, setTempSystem] = useState('');
 
   const handleCopyDomain = () => {
     navigator.clipboard.writeText(window.location.hostname);
@@ -89,6 +94,8 @@ export default function App() {
             coFounderPayouts: restData.coFounderPayouts || [],
             projectTracker: restData.projectTracker || [],
             workAssignments: restData.workAssignments || [],
+            companyName: restData.companyName || 'Cambrian',
+            systemName: restData.systemName || 'IndiWebPros'
           } as WorkbookState);
           setSyncState('synced');
         } else {
@@ -102,6 +109,8 @@ export default function App() {
             coFounderPayouts: state.coFounderPayouts || [],
             projectTracker: state.projectTracker || [],
             workAssignments: state.workAssignments || [],
+            companyName: state.companyName || 'Cambrian',
+            systemName: state.systemName || 'IndiWebPros',
             updatedAt: new Date().toISOString()
           });
           setSyncState('synced');
@@ -134,6 +143,8 @@ export default function App() {
           coFounderPayouts: state.coFounderPayouts || [],
           projectTracker: state.projectTracker || [],
           workAssignments: state.workAssignments || [],
+          companyName: state.companyName || 'Cambrian',
+          systemName: state.systemName || 'IndiWebPros',
           updatedAt: new Date().toISOString()
         });
         setSyncState('synced');
@@ -181,6 +192,23 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
 
   // --- 2. GLOBAL CONTROLS ---
+  const openBrandingEditor = () => {
+    setTempCompany(state.companyName || 'Cambrian');
+    setTempSystem(state.systemName || 'IndiWebPros');
+    setIsEditingTitle(true);
+  };
+
+  const handleSaveBranding = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!tempCompany.trim() || !tempSystem.trim()) return;
+    setState(prev => ({
+      ...prev,
+      companyName: tempCompany.trim(),
+      systemName: tempSystem.trim()
+    }));
+    setIsEditingTitle(false);
+  };
+
   const handleResetToDefault = () => {
     if (confirm('Are you sure you want to revert all sheets to the default Cambrian / IndiWebPros template? This will overwrite your current draft.')) {
       setState(INITIAL_WORKBOOK_STATE);
@@ -196,7 +224,9 @@ export default function App() {
         internships: [],
         coFounderPayouts: [],
         projectTracker: [],
-        workAssignments: []
+        workAssignments: [],
+        companyName: state.companyName || 'Cambrian',
+        systemName: state.systemName || 'IndiWebPros'
       });
     }
   };
@@ -678,15 +708,24 @@ export default function App() {
           <div className="flex items-center justify-between h-14">
             
             {/* Branding Hub */}
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 bg-[#0f4c81] rounded-xl flex items-center justify-center shadow-sm">
+            <div 
+              onClick={openBrandingEditor}
+              className="flex items-center gap-2.5 cursor-pointer hover:bg-slate-50 py-1 px-1.5 rounded-xl transition group/brand"
+              title="Click to rename workbook branding"
+            >
+              <div className="h-9 w-9 bg-[#0f4c81] rounded-xl flex items-center justify-center shadow-sm group-hover/brand:bg-blue-700 transition">
                 <FileSpreadsheet className="h-5 w-5 text-white" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-black text-slate-800 tracking-tight">Cambrian</span>
+                  <span className="text-sm font-black text-slate-800 tracking-tight">
+                    {state.companyName || 'Cambrian'}
+                  </span>
                   <span className="text-slate-350 text-xs">/</span>
-                  <span className="text-xs font-bold text-slate-550 italic font-mono bg-slate-100 px-1 py-0.5 rounded">IndiWebPros</span>
+                  <span className="text-xs font-bold text-slate-550 italic font-mono bg-slate-100 px-1 py-0.5 rounded group-hover/brand:bg-slate-200 transition">
+                    {state.systemName || 'IndiWebPros'}
+                  </span>
+                  <Edit3 className="h-3 w-3 text-slate-400 opacity-0 group-hover/brand:opacity-100 transition" />
                 </div>
                 <p className="text-[10px] text-slate-450">Financial Workbook Manager</p>
               </div>
@@ -792,8 +831,15 @@ export default function App() {
                 </button>
                 <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-56 text-xs text-slate-700 hidden group-hover:block z-50">
                   <button
+                    onClick={openBrandingEditor}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700 font-semibold cursor-pointer"
+                  >
+                    <Edit3 className="h-3.5 w-3.5 text-[#0f4c81]" />
+                    Change Branding Title
+                  </button>
+                  <button
                     onClick={handleResetToDefault}
-                    className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2 text-blue-600 font-medium cursor-pointer"
+                    className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2 text-blue-600 font-medium border-t border-slate-100 cursor-pointer"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     Reset to Blank Template
@@ -1424,6 +1470,80 @@ export default function App() {
                   Close Help Guide
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+        {/* EDIT BRANDING MODAL */}
+        {isEditingTitle && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 p-6 md:p-8 w-full max-w-sm relative text-slate-800 my-8"
+            >
+              <button 
+                onClick={() => setIsEditingTitle(false)}
+                className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              <div className="flex items-center gap-3 mb-5 text-[#0f4c81]">
+                <div className="p-2.5 bg-[#0f4c81]/10 rounded-xl">
+                  <Edit3 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">Custom Brand Titles</h3>
+                  <p className="text-[11px] text-slate-550">Configure your workspace name and labelings</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveBranding} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-600 mb-1">
+                    Company Name / Parent Folder Name
+                  </label>
+                  <input
+                    type="text"
+                    value={tempCompany}
+                    onChange={e => setTempCompany(e.target.value)}
+                    placeholder="e.g. Cambrian"
+                    className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/70 focus:bg-white text-slate-800 rounded-lg text-xs font-semibold border border-slate-250 focus:border-[#0f4c81] focus:ring-1 focus:ring-[#0f4c81] outline-hidden transition"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-600 mb-1">
+                    System Name / Subsystem Tag
+                  </label>
+                  <input
+                    type="text"
+                    value={tempSystem}
+                    onChange={e => setTempSystem(e.target.value)}
+                    placeholder="e.g. IndiWebPros"
+                    className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/70 focus:bg-white text-slate-800 rounded-lg text-xs font-semibold border border-slate-250 focus:border-[#0f4c81] focus:ring-1 focus:ring-[#0f4c81] outline-hidden transition"
+                    required
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingTitle(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-705 rounded-lg transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-[#0f4c81] hover:bg-[#0c3e6a] text-white rounded-lg transition cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

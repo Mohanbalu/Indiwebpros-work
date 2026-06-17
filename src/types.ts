@@ -154,4 +154,6 @@ export interface WorkbookState {
   coFounderPayouts: CoFounderRevenueSharing[];
   projectTracker: ProjectTracker[];
   workAssignments: WorkAssignment[];
+  companyName?: string;
+  systemName?: string;
 }

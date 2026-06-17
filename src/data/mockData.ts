@@ -7,5 +7,7 @@ export const INITIAL_WORKBOOK_STATE: WorkbookState = {
   internships: [],
   coFounderPayouts: [],
   projectTracker: [],
-  workAssignments: []
+  workAssignments: [],
+  companyName: 'Cambrian',
+  systemName: 'IndiWebPros'
 };
