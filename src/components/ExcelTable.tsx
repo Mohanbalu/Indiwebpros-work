@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Trash2, Filter, ArrowUpDown, ChevronDown, RefreshCw, X, Edit, Layers } from 'lucide-react';
+import { Search, Plus, Trash2, Filter, ArrowUpDown, ChevronDown, RefreshCw, X, Edit, Layers, Sparkles } from 'lucide-react';
 
 export interface ColumnDefinition<T> {
   key: keyof T | 'actions';
@@ -22,6 +22,83 @@ interface ExcelTableProps<T extends { id: string }> {
   onDelete: (id: string) => void;
   onReset?: () => void;
   defaultNewRecord: Partial<T>;
+  suggestionsMap?: Record<string, { value: string; subtext?: string; fillOthers?: Record<string, any> }[]>;
+}
+
+interface SuggestiveInputProps {
+  value: string;
+  onChange: (val: string, fillOthers?: Record<string, any>) => void;
+  placeholder: string;
+  suggestions?: { value: string; subtext?: string; fillOthers?: Record<string, any> }[];
+}
+
+function SuggestiveInput({ value, onChange, placeholder, suggestions }: SuggestiveInputProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Filter suggestions based on typed input
+  const filteredSuggestions = useMemo(() => {
+    if (!suggestions) return [];
+    if (!value.trim()) return suggestions; // Show all on focus if empty
+    const q = value.toLowerCase();
+    return suggestions.filter(item => 
+      item.value.toLowerCase().includes(q) || 
+      (item.subtext && item.subtext.toLowerCase().includes(q))
+    );
+  }, [suggestions, value]);
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setIsOpen(true)}
+        onBlur={() => {
+          // Allow onMouseDown on suggestions to execute first
+          setTimeout(() => setIsOpen(false), 200);
+        }}
+        placeholder={placeholder}
+        className="w-full text-xs text-slate-700 bg-white border border-slate-300 rounded-lg pl-2 pr-7 py-2 focus:outline-none focus:ring-1 focus:ring-[#0f4c81] focus:border-[#0f4c81]"
+      />
+      {suggestions && suggestions.length > 0 && (
+        <span className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-indigo-400 pointer-events-none" title="Smart suggestions active for this field">
+          <Sparkles className="h-3.5 w-3.5" />
+        </span>
+      )}
+      
+      {isOpen && filteredSuggestions.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-40 overflow-y-auto z-50 py-1 divide-y divide-slate-100">
+          {filteredSuggestions.map((item, idx) => (
+            <button
+              key={`${item.value}-${idx}`}
+              type="button"
+              onMouseDown={(e) => {
+                // Prevent input focus loss from dismissing selection before registing click
+                e.preventDefault();
+                onChange(item.value, item.fillOthers);
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between text-xs transition duration-75 text-slate-800"
+            >
+              <div>
+                <span className="font-semibold">{item.value}</span>
+                {item.fillOthers && Object.keys(item.fillOthers).length > 0 && (
+                  <span className="text-[9px] text-indigo-600 bg-indigo-50 px-1 py-0.2 rounded ml-1.5 border border-indigo-120">
+                    + Auto-fill
+                  </span>
+                )}
+              </div>
+              {item.subtext && (
+                <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+                  {item.subtext}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function ExcelTable<T extends { id: string }>({
@@ -34,6 +111,7 @@ export default function ExcelTable<T extends { id: string }>({
   onDelete,
   onReset,
   defaultNewRecord,
+  suggestionsMap,
 }: ExcelTableProps<T>) {
   // Search & Filtering State
   const [globalSearch, setGlobalSearch] = useState('');
@@ -566,12 +644,22 @@ export default function ExcelTable<T extends { id: string }>({
                             className="w-full text-xs text-slate-705 bg-white border border-slate-300 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-[#0f4c81]"
                           />
                         ) : (
-                          <input
-                            type="text"
+                          <SuggestiveInput
                             value={String(activeRecord[col.key as keyof T] || '')}
-                            onChange={(e) => setActiveRecord(prev => ({ ...prev, [col.key]: e.target.value }))}
+                            onChange={(val, fillOthers) => {
+                              setActiveRecord(prev => {
+                                if (!prev) return prev;
+                                const next = { ...prev, [col.key]: val };
+                                if (fillOthers) {
+                                  Object.entries(fillOthers).forEach(([otherKey, otherVal]) => {
+                                    next[otherKey as keyof T] = otherVal;
+                                  });
+                                }
+                                return next;
+                              });
+                            }}
                             placeholder={col.placeholder || `Enter ${col.header}`}
-                            className="w-full text-xs text-slate-700 bg-white border border-slate-300 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-[#0f4c81]"
+                            suggestions={suggestionsMap ? suggestionsMap[k] : undefined}
                           />
                         )}
                       </div>
@@ -664,12 +752,22 @@ export default function ExcelTable<T extends { id: string }>({
                             className="w-full text-xs text-slate-700 bg-white border border-slate-300 rounded-lg p-2 focus:outline-none"
                           />
                         ) : (
-                          <input
-                            type="text"
+                          <SuggestiveInput
                             value={String(activeRecord[col.key as keyof T] || '')}
-                            onChange={(e) => setActiveRecord(prev => ({ ...prev, [col.key]: e.target.value }))}
+                            onChange={(val, fillOthers) => {
+                              setActiveRecord(prev => {
+                                if (!prev) return prev;
+                                const next = { ...prev, [col.key]: val };
+                                if (fillOthers) {
+                                  Object.entries(fillOthers).forEach(([otherKey, otherVal]) => {
+                                    next[otherKey as keyof T] = otherVal;
+                                  });
+                                }
+                                return next;
+                              });
+                            }}
                             placeholder={col.placeholder || `Enter ${col.header}`}
-                            className="w-full text-xs text-slate-700 bg-white border border-slate-300 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-[#0f4c81]"
+                            suggestions={suggestionsMap ? suggestionsMap[k] : undefined}
                           />
                         )}
                       </div>

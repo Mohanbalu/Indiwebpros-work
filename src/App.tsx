@@ -738,6 +738,126 @@ export default function App() {
     { key: 'actions', header: 'Actions', type: 'text' }
   ];
 
+  // Dynamic register of team members, mentors, and cofounders for smart autocomplete/suggestions
+  const teamRegistry = useMemo(() => {
+    const registry: Array<{ name: string; role: string; details?: string }> = [];
+
+    // Helper to add unique records
+    const addUnique = (name: string, role: string, details?: string) => {
+      const nameClean = name.trim();
+      if (!nameClean) return;
+      if (!registry.some(r => r.name.toLowerCase() === nameClean.toLowerCase())) {
+        registry.push({ name: nameClean, role: role.trim(), details: details?.trim() });
+      }
+    };
+
+    // 1. Extract dynamically from Team Contributions
+    (state.teamContributions || []).forEach(tc => {
+      if (tc.name) {
+        addUnique(tc.name, tc.role || 'Team Member', 'Team Contribution Record');
+      }
+    });
+
+    // 2. Extract dynamically from Internship Management
+    (state.internships || []).forEach(intern => {
+      if (intern.internName) {
+        const role = intern.batch ? `Intern (${intern.batch})` : 'Intern';
+        addUnique(intern.internName, role, intern.college || 'Internship Management');
+      }
+      if (intern.mentor) {
+        addUnique(intern.mentor, 'Intern Mentor', 'Intern Mentor Record');
+      }
+    });
+
+    // 3. Extract dynamically from CoFounder payouts
+    (state.coFounderPayouts || []).forEach(cf => {
+      if (cf.name) {
+        addUnique(cf.name, 'Co-founder', 'Co-founder Payouts Record');
+      }
+    });
+
+    // 4. Extract dynamically from other tables in the DB
+    (state.projectTracker || []).forEach(pt => {
+      if (pt.assignedTo) {
+        addUnique(pt.assignedTo, 'Assignee', 'Project Tracker Record');
+      }
+    });
+
+    (state.workAssignments || []).forEach(wa => {
+      if (wa.assignedTo) {
+        addUnique(wa.assignedTo, 'Assignee', 'Work Assignment Record');
+      }
+    });
+
+    return registry;
+  }, [state.teamContributions, state.internships, state.coFounderPayouts, state.projectTracker, state.workAssignments]);
+
+  // Auto-suggestions mapping for different Sheets/Tables
+  const workAssignmentSuggestions = useMemo(() => {
+    // Collect all unique "assignedBy" values from active database assignments to suggest them
+    const existingAssignedByList = Array.from(new Set(
+      (state.workAssignments || []).map(wa => wa.assignedBy?.trim()).filter(Boolean)
+    ));
+
+    return {
+      assignedTo: teamRegistry.map(member => ({
+        value: member.name,
+        subtext: member.role,
+        fillOthers: {
+          remarks: `Assigned task to ${member.role}`
+        }
+      })),
+      assignedBy: existingAssignedByList.length > 0 
+        ? existingAssignedByList.map(name => ({
+            value: name,
+            subtext: 'Existing Assigner'
+          }))
+        : [
+            { value: 'Founder', subtext: 'Founder Account' },
+            { value: 'Co-founder', subtext: 'Co-founder Account' }
+          ]
+    };
+  }, [teamRegistry, state.workAssignments]);
+
+  const trackerSuggestions = useMemo(() => {
+    return {
+      assignedTo: teamRegistry.map(member => ({
+        value: member.name,
+        subtext: member.role,
+        fillOthers: {
+          remarks: `Managed by ${member.role}`
+        }
+      }))
+    };
+  }, [teamRegistry]);
+
+  const teamContributionSuggestions = useMemo(() => {
+    return {
+      name: teamRegistry.map(member => ({
+        value: member.name,
+        subtext: member.role,
+        fillOthers: {
+          role: member.role
+        }
+      })),
+      role: Array.from(new Set(teamRegistry.map(m => m.role))).map(role => ({
+        value: role,
+        subtext: 'Known company role'
+      }))
+    };
+  }, [teamRegistry]);
+
+  const internshipSuggestions = useMemo(() => {
+    return {
+      mentor: teamRegistry
+        .filter(m => !m.role.toLowerCase().includes('intern'))
+        .map(member => ({
+          value: member.name,
+          subtext: member.role
+        }))
+    };
+  }, [teamRegistry]);
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans select-none antialiased">
       
@@ -839,14 +959,30 @@ export default function App() {
                           {currentUser.displayName?.[0] || currentUser.email?.[0]?.toUpperCase() || '?'}
                         </div>
                       )}
-                      <span className="text-xs font-medium text-slate-700 max-w-[80px] truncate hidden lg:inline">
-                        {currentUser.displayName || currentUser.email}
-                      </span>
+                      <div className="flex flex-col items-start leading-none hidden lg:flex">
+                        <span className="text-xs font-semibold text-slate-700 max-w-[80px] truncate">
+                          {currentUser.displayName || currentUser.email}
+                        </span>
+                        {currentUser.email?.toLowerCase() === 'mohanbalu292@gmail.com' && (
+                          <span className="text-[9px] font-black text-indigo-700 bg-indigo-50 px-1 py-0.2 rounded border border-indigo-120 uppercase tracking-wide mt-0.5 animate-pulse">Founder</span>
+                        )}
+                        {currentUser.email?.toLowerCase() === 'ysharish4@gmail.com' && (
+                          <span className="text-[9px] font-black text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-120 uppercase tracking-wide mt-0.5">Co-founder</span>
+                        )}
+                      </div>
                     </button>
                     {/* User profile action popover */}
                     <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl py-2 w-52 text-xs text-slate-700 hidden group-hover/profile:block z-50">
-                      <div className="px-3 pb-2 mb-2 border-b border-slate-100">
-                        <p className="font-bold text-slate-800 truncate">{currentUser.displayName || 'Authorized User'}</p>
+                      <div className="px-3 pb-2 mb-2 border-b border-slate-100 space-y-1">
+                        <div className="flex items-center gap-1.5 justify-between">
+                          <p className="font-bold text-slate-800 truncate">{currentUser.displayName || 'Authorized User'}</p>
+                          {currentUser.email?.toLowerCase() === 'mohanbalu292@gmail.com' && (
+                            <span className="text-[9px] font-black text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded border border-indigo-120">FOUNDER</span>
+                          )}
+                          {currentUser.email?.toLowerCase() === 'ysharish4@gmail.com' && (
+                            <span className="text-[9px] font-black text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-120">CO-FOUNDER</span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-slate-500 truncate">{currentUser.email}</p>
                       </div>
                       <button
@@ -1033,6 +1169,7 @@ export default function App() {
                 onUpdate={updateTeamrow}
                 onDelete={deleteTeamrow}
                 onReset={handleResetToDefault}
+                suggestionsMap={teamContributionSuggestions}
                 defaultNewRecord={{
                   month: 'June 2026',
                   name: '',
@@ -1112,6 +1249,7 @@ export default function App() {
                 onUpdate={updateInternship}
                 onDelete={deleteInternship}
                 onReset={handleResetToDefault}
+                suggestionsMap={internshipSuggestions}
                 defaultNewRecord={{
                   internName: '',
                   college: '',
@@ -1245,6 +1383,7 @@ export default function App() {
                 onUpdate={updateProjectTracker}
                 onDelete={deleteProjectTracker}
                 onReset={handleResetToDefault}
+                suggestionsMap={trackerSuggestions}
                 defaultNewRecord={{
                   id: `PROJ-${Date.now().toString().slice(-3)}`,
                   client: '',
@@ -1272,6 +1411,7 @@ export default function App() {
                 onUpdate={updateWorkAssignment}
                 onDelete={deleteWorkAssignment}
                 onReset={handleResetToDefault}
+                suggestionsMap={workAssignmentSuggestions}
                 defaultNewRecord={{
                   taskTitle: '',
                   description: '',
@@ -1674,6 +1814,28 @@ export default function App() {
               </div>
 
               <div className="space-y-5">
+                {/* Team Quick Info for Founder and Co-founder */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs space-y-2">
+                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>👥 Linked Organization Members</span>
+                  </span>
+                  <div className="space-y-1.5 font-mono text-[10px]">
+                    <div className="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-100">
+                      <span className="text-slate-650">mohanbalu292@gmail.com</span>
+                      <span className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-120 font-sans font-black text-[9px] tracking-wider uppercase">Founder</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-100">
+                      <span className="text-slate-650">ysharish4@gmail.com</span>
+                      <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-120 font-sans font-black text-[9px] tracking-wider uppercase font-medium">Co-founder</span>
+                    </div>
+                  </div>
+                  <p className="text-[10.5px] text-slate-500 leading-normal font-sans pt-1">
+                    💡 <strong>Sync Guide:</strong> To work together and load your joint details in real-time:
+                    <span className="block mt-1">1. The <strong>Founder</strong> (mohanbalu) should copy their Work Code from Step 1.</span>
+                    <span className="block mt-0.5">2. The <strong>Co-founder</strong> (ysharish) should paste that same code into Step 2 below and click <strong>Connect</strong>!</span>
+                  </p>
+                </div>
+
                 {/* PART 1: Copy Shared Code to send to Friend */}
                 <div className="bg-slate-50/50 border border-slate-205 rounded-xl p-4 space-y-2.5">
                   <h4 className="text-xs font-bold text-slate-805">1. Share Your Workbook with a Friend</h4>
