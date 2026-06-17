@@ -36,6 +36,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [syncState, setSyncState] = useState<'synced' | 'syncing' | 'error' | 'offline'>('offline');
+  const [loadedWorkbookId, setLoadedWorkbookId] = useState<string | null>(null);
   const [authError, setAuthError] = useState<{ code?: string; message: string; hostname: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -84,13 +85,16 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) {
       setSyncState('offline');
+      setLoadedWorkbookId(null);
       return;
     }
+
+    const docId = sharedWorkbookId || currentUser.uid;
+    setLoadedWorkbookId(null); // Reset loaded workbook ID while we load the new one
 
     const loadData = async () => {
       setSyncState('syncing');
       try {
-        const docId = sharedWorkbookId || currentUser.uid;
         const userDocRef = doc(db, 'workbooks', docId);
         const docSnap = await getDoc(userDocRef);
         if (docSnap.exists()) {
@@ -107,7 +111,6 @@ export default function App() {
             companyName: restData.companyName || 'Cambrian',
             systemName: restData.systemName || 'IndiWebPros'
           } as WorkbookState);
-          setSyncState('synced');
         } else {
           // Store existing local state to Firestore as initial onboarding state
           await setDoc(userDocRef, {
@@ -123,11 +126,12 @@ export default function App() {
             systemName: state.systemName || 'IndiWebPros',
             updatedAt: new Date().toISOString()
           });
-          setSyncState('synced');
         }
+        setLoadedWorkbookId(docId); // Mark the database document as successfully loaded
+        setSyncState('synced');
       } catch (err) {
         setSyncState('error');
-        handleFirestoreError(err, OperationType.GET, `workbooks/${sharedWorkbookId || currentUser.uid}`);
+        handleFirestoreError(err, OperationType.GET, `workbooks/${docId}`);
       }
     };
 
@@ -140,10 +144,16 @@ export default function App() {
 
     if (!currentUser) return;
 
+    const docId = sharedWorkbookId || currentUser.uid;
+    
+    // Safety check: Avoid writing to Firestore if this document's initial load isn't complete!
+    if (loadedWorkbookId !== docId) {
+      return;
+    }
+
     const timer = setTimeout(async () => {
       setSyncState('syncing');
       try {
-        const docId = sharedWorkbookId || currentUser.uid;
         const userDocRef = doc(db, 'workbooks', docId);
         await setDoc(userDocRef, {
           userId: docId,
@@ -166,7 +176,7 @@ export default function App() {
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [state, currentUser, sharedWorkbookId]);
+  }, [state, currentUser, sharedWorkbookId, loadedWorkbookId]);
 
   const handleGoogleSignIn = async () => {
     setAuthError(null);

@@ -17,8 +17,8 @@ service cloud.firestore {
     }
 
     match /workbooks/{userId} {
-      // Users can only access and modify their own workbook
-      allow read, write: if isOwner(userId);
+      // Allow any signed-in user to collaborate on workbooks
+      allow read, write: if isSignedIn();
     }
   }
 }
