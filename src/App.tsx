@@ -44,6 +44,15 @@ export default function App() {
   const [tempCompany, setTempCompany] = useState('');
   const [tempSystem, setTempSystem] = useState('');
 
+  // Workbook Collaboration/Sharing states
+  const [sharedWorkbookId, setSharedWorkbookId] = useState<string | null>(() => {
+    return localStorage.getItem('shared_workbook_id');
+  });
+  const [isCollaborationOpen, setIsCollaborationOpen] = useState(false);
+  const [tempShareCode, setTempShareCode] = useState('');
+  const [shareSuccess, setShareSuccess] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
   const handleCopyDomain = () => {
     navigator.clipboard.writeText(window.location.hostname);
     setCopied(true);
@@ -71,7 +80,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch Cloud workbook when user logs in
+  // Fetch Cloud workbook when user logs in or shared ID changes
   useEffect(() => {
     if (!currentUser) {
       setSyncState('offline');
@@ -81,7 +90,8 @@ export default function App() {
     const loadData = async () => {
       setSyncState('syncing');
       try {
-        const userDocRef = doc(db, 'workbooks', currentUser.uid);
+        const docId = sharedWorkbookId || currentUser.uid;
+        const userDocRef = doc(db, 'workbooks', docId);
         const docSnap = await getDoc(userDocRef);
         if (docSnap.exists()) {
           const dbData = docSnap.data();
@@ -101,7 +111,7 @@ export default function App() {
         } else {
           // Store existing local state to Firestore as initial onboarding state
           await setDoc(userDocRef, {
-            userId: currentUser.uid,
+            userId: docId,
             teamContributions: state.teamContributions || [],
             projectRevenue: state.projectRevenue || [],
             businessExpenses: state.businessExpenses || [],
@@ -117,12 +127,12 @@ export default function App() {
         }
       } catch (err) {
         setSyncState('error');
-        handleFirestoreError(err, OperationType.GET, `workbooks/${currentUser.uid}`);
+        handleFirestoreError(err, OperationType.GET, `workbooks/${sharedWorkbookId || currentUser.uid}`);
       }
     };
 
     loadData();
-  }, [currentUser]);
+  }, [currentUser, sharedWorkbookId]);
 
   // Debounced auto-save of state to Cloud/Local
   useEffect(() => {
@@ -133,9 +143,10 @@ export default function App() {
     const timer = setTimeout(async () => {
       setSyncState('syncing');
       try {
-        const userDocRef = doc(db, 'workbooks', currentUser.uid);
+        const docId = sharedWorkbookId || currentUser.uid;
+        const userDocRef = doc(db, 'workbooks', docId);
         await setDoc(userDocRef, {
-          userId: currentUser.uid,
+          userId: docId,
           teamContributions: state.teamContributions || [],
           projectRevenue: state.projectRevenue || [],
           businessExpenses: state.businessExpenses || [],
@@ -155,7 +166,7 @@ export default function App() {
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [state, currentUser]);
+  }, [state, currentUser, sharedWorkbookId]);
 
   const handleGoogleSignIn = async () => {
     setAuthError(null);
@@ -175,6 +186,8 @@ export default function App() {
     if (confirm('Are you sure you want to sign out? Your cloud data remains safe, and you will continue in offline mode.')) {
       try {
         await signOut(auth);
+        setSharedWorkbookId(null);
+        localStorage.removeItem('shared_workbook_id');
         setState(INITIAL_WORKBOOK_STATE);
       } catch (err) {
         console.error('Sign Out Error:', err);
@@ -213,6 +226,22 @@ export default function App() {
     if (confirm('Are you sure you want to revert all sheets to the default Cambrian / IndiWebPros template? This will overwrite your current draft.')) {
       setState(INITIAL_WORKBOOK_STATE);
     }
+  };
+
+  const handleConnectSharedWorkbook = (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = tempShareCode.trim();
+    if (!code) return;
+    setSharedWorkbookId(code);
+    localStorage.setItem('shared_workbook_id', code);
+    setIsCollaborationOpen(false);
+  };
+
+  const handleDisconnectSharedWorkbook = () => {
+    setSharedWorkbookId(null);
+    localStorage.removeItem('shared_workbook_id');
+    setTempShareCode('');
+    setIsCollaborationOpen(false);
   };
 
   const handleClearAll = () => {
@@ -741,6 +770,31 @@ export default function App() {
                 </div>
               ) : currentUser ? (
                 <div className="flex items-center gap-2">
+                  {/* Collaboration Status & Settings Button */}
+                  <button
+                    onClick={() => {
+                      setTempShareCode(sharedWorkbookId || '');
+                      setIsCollaborationOpen(true);
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition duration-200 cursor-pointer ${
+                      sharedWorkbookId
+                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 shadow-xs animate-pulse'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-650 border-slate-250'
+                    }`}
+                    title={sharedWorkbookId ? 'Viewing shared team workbook. Click to manage.' : 'Share or connect to team workbooks'}
+                  >
+                    <Users className="h-3.5 w-3.5 text-indigo-550" />
+                    <span className="hidden sm:inline">
+                      {sharedWorkbookId ? 'Collaborating (Active)' : 'Share & Collaborate'}
+                    </span>
+                    {sharedWorkbookId && (
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-600"></span>
+                      </span>
+                    )}
+                  </button>
+
                   {/* Status Indicator */}
                   <div 
                     className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${
@@ -1544,6 +1598,128 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+        {/* COLLABORATION & WORKSPACE SHARING MODAL */}
+        {isCollaborationOpen && currentUser && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 p-6 md:p-8 w-full max-w-md relative text-slate-800 my-8"
+            >
+              <button 
+                onClick={() => setIsCollaborationOpen(false)}
+                className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              <div className="flex items-center gap-3 mb-5 text-indigo-750">
+                <div className="p-2.5 bg-indigo-55/10 rounded-xl">
+                  <Users className="h-6 w-6 text-indigo-700" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 font-sans tracking-tight">Workbook Collaboration</h3>
+                  <p className="text-[11px] text-slate-550">Share or connect to team spreadsheets in real-time</p>
+                </div>
+              </div>
+
+              {/* Connected / Mode Status Header */}
+              <div className="mb-5 p-3.5 bg-slate-50 hover:bg-slate-50/80 rounded-xl border text-xs transition-all">
+                {sharedWorkbookId ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-indigo-700 font-bold">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-650"></span>
+                      </span>
+                      <span>Connected to Shared Workbook</span>
+                    </div>
+                    <p className="text-slate-500 leading-relaxed">
+                      You are actively synchronizing data with your team workspace on the cloud. Any changes will automatically update for everyone.
+                    </p>
+                    <div className="pt-1.5">
+                      <button
+                        onClick={handleDisconnectSharedWorkbook}
+                        className="w-full py-1.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold rounded-lg border border-rose-100 text-[11px] transition cursor-pointer"
+                      >
+                        Disconnect & Reset to My Personal Workbook
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                      <span>Personal Private Workbook Mode</span>
+                    </div>
+                    <p className="text-slate-550 leading-relaxed">
+                      Currently loading and saving directly to your personal private Google account workspace. Only you can view or modify this by default.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-5">
+                {/* PART 1: Copy Shared Code to send to Friend */}
+                <div className="bg-slate-50/50 border border-slate-205 rounded-xl p-4 space-y-2.5">
+                  <h4 className="text-xs font-bold text-slate-805">1. Share Your Workbook with a Friend</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Provide your unique Work Code below to your friend. Once they enter this in their app, you will both share, view, and build the same workspace details.
+                  </p>
+                  <div className="flex items-center gap-2 bg-white border border-slate-250 p-2 rounded-lg justify-between select-all font-mono text-xs text-slate-705">
+                    <span className="truncate max-w-[240px] font-medium">{currentUser.uid}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentUser.uid);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      }}
+                      className="flex-shrink-0 text-slate-550 hover:text-indigo-750 p-1 rounded hover:bg-slate-105 transition cursor-pointer"
+                      title="Copy my code"
+                    >
+                      {copiedCode ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4 text-slate-500" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* PART 2: Connect to Friend's Code */}
+                <form onSubmit={handleConnectSharedWorkbook} className="bg-indigo-50/30 border border-indigo-100 rounded-xl p-4 space-y-3">
+                  <h4 className="text-xs font-bold text-indigo-900">2. Connect to a Shared Workbook</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    To join your friend's workspace, paste their Work Code below and connect:
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={tempShareCode}
+                      onChange={e => setTempShareCode(e.target.value)}
+                      placeholder="Paste friend's Work Code here..."
+                      className="flex-1 px-2.5 py-1.5 bg-white text-slate-800 rounded-lg text-xs font-medium border border-slate-250 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-hidden transition text-slate-850"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded-lg text-xs transition cursor-pointer flex-shrink-0"
+                    >
+                      Connect
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsCollaborationOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-705 font-bold rounded-lg text-xs transition cursor-pointer"
+                >
+                  Close Manager
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
