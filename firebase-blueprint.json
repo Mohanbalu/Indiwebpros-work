@@ -1,0 +1,50 @@
+{
+  "entities": {
+    "Workbook": {
+      "title": "Workbook",
+      "description": "User's financial workbook state containing all sheets",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        },
+        "teamContributions": {
+          "type": "array",
+          "description": "List of team contributions"
+        },
+        "projectRevenue": {
+          "type": "array",
+          "description": "List of project revenues"
+        },
+        "businessExpenses": {
+          "type": "array",
+          "description": "List of business expenses"
+        },
+        "internships": {
+          "type": "array",
+          "description": "List of internships"
+        },
+        "coFounderPayouts": {
+          "type": "array",
+          "description": "List of co-founder payouts"
+        },
+        "projectTracker": {
+          "type": "array",
+          "description": "List of project trackers"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId"]
+    }
+  },
+  "firestore": {
+    "/workbooks/{userId}": {
+      "schema": "Workbook",
+      "description": "User specific workbook data document"
+    }
+  }
+}

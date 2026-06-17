@@ -1,0 +1,8 @@
+{
+  "name": "Cambrian IndiWebPros Finance Tracker",
+  "description": "Professional multi-sheet workbook and analytics dashboard for Cambrian / IndiWebPros to manage monthly team contributions, project revenue, expenses, internships, co-founder payouts, and profit growth.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
